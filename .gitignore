@@ -103,3 +103,7 @@ ENV/
 
 #vscode
 .vscode
+*.code-workspace
+
+#Mac
+.DS_Store
