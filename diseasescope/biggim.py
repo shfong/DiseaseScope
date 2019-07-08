@@ -15,7 +15,8 @@ class BigGIM(object):
     https://github.com/NCATS-Tangerine/BigGIM_APIWrapper/blob/master/app.py
     that wraps the BigGIM API.
 
-    As well as Wrapper code by John Earls
+    As well as Wrapper code by John Earls 
+    TODO: Include links
     """
 
     URL = "http://biggim.ncats.io/api"
@@ -68,6 +69,15 @@ class BigGIM(object):
 
         return self._getBG(f'metadata/table/{table}')
 
+    def get_all_columns(self, table):
+        """Get all available columns in a table"""
+
+        tmp = self.get_table_metadata(table)
+        columns = [j['name'] for j in tmp['columns']]
+
+        return columns
+
+
     def get_column_metadata(self, table, column): 
         """Get metadata for a single column"""
 
@@ -94,24 +104,28 @@ class BigGIM(object):
             Name of the BigGIM table to look up
         """
 
-        if isinstance(tissues, str): 
-            tissues = [tissues]
+        #TODO: Refactor this
 
-        all_tissues = self.get_all_tissues()['tissues']
+        columns = []
+        try:
+            # query
+            md = self.get_tissue_metadata(tissues)
+            for st in md.get('substudies', []): # Allow for nothing found
+                for column in st.get('columns',[]):
+                    #filter table
+                    if column.get('table', {}).get('name', None) == table:
+                        #filter r(spearman)
+    #                    if column.get('interactions_type',None) == 'Spearman Rank Correlation Coefficient':
+                            #get the name of the columns
+                            if column.get('name', None) is not None:
+                                columns.append(column.get('name'))
+        except requests.HTTPError as e:
+            #if 404 error, it could not find the tissue, otherwise something bad happend
+            if e.args[0].find('404') == -1:
+                raise
+        
+        return columns
 
-        selected_columns = set([])
-        for tissue in tissues: 
-            columns = [t for t in all_tissues if tissue in t]
-            selected_columns = selected_columns.union(columns)
-
-        selected_columns = sorted(list(selected_columns))
-
-        if len(selected_columns) == 0:
-            raise Exception("No Big GIM columns related to %s" % (str(tissues)))
-        else:
-            logging.info("Returned %i Big GIM columns" % (len(selected_columns), ))
-
-        return selected_columns
 
 
     def query(
@@ -126,7 +140,7 @@ class BigGIM(object):
         restriction_gt=None, 
         restriction_lt=None, 
         table='BigGIM_70_v1',
-        validate_columns=True, 
+        tissues=None, 
         wait_for_query=False, 
         wait_time = 1, 
         to_dataframe = False, 
@@ -142,8 +156,7 @@ class BigGIM(object):
             Optional second set of genes to cross with ids1. Otherwise, all 
             genepairs containing ids1 will be considered
         columns : str
-            Which BigGIM table column to consider. columns will get passed to
-            query_columns if validate_columns is True.
+            Which BigGIM table column to consider.
         average_columns : Bool, 
             TODO: ???
         limit : int
@@ -155,6 +168,9 @@ class BigGIM(object):
         restriction_lt 
         table : str
             Name of the BigGIM table to use
+        tissues : str
+            columns take precedence over tissues. If tissues is given, the 
+            columns tha correspond to the tissue will be returned.
         wait_for_query : Bool
             If true, the method call will not return until the query is complete
         wait_time : int
@@ -166,21 +182,19 @@ class BigGIM(object):
             attribute if the query was completed successfully.
         """
 
-        if validate_columns: 
-            validated_columns = self.query_columns(columns, table=table)
-            logging.info(f"Found the following columns in BigGIM: {validated_columns}")
-            if not validate_columns: 
-                raise ValueError("No relevant columns found in BigGIM")
-
-        else:
-            if isinstance(columns, str): 
-                columns = [columns]
-
+        if columns is not None: 
             validated_columns = columns
 
-        validated_columns = ','.join(validated_columns)
+        elif tissues is not None:
+            validated_columns = self.query_columns(tissues, table=table)
+            logging.info(f"Found the following columns in BigGIM: {validated_columns}")
+            
+        else: 
+            columns = None # This is strip columns from the input, resulting in all columns being returned
 
-        payload = {
+        validated_columns = ','.join(validated_columns)
+        
+        kwargs = {
             'ids1': ids1, 
             'ids2': ids2, 
             'columns': validated_columns, 
@@ -192,6 +206,8 @@ class BigGIM(object):
             'restriction_lt': restriction_lt, 
             'table': table, 
         }
+
+        payload = {k:v for k,v in kwargs.items() if k is not None}
 
         logging.debug(f"Payload: {payload}")
         self.query_payload = payload
