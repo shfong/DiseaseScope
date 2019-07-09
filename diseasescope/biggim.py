@@ -3,6 +3,7 @@ import requests
 import logging
 from time import time, sleep
 import pandas as pd
+import numpy as np
 from numpy import inf
 
 logger = logging.getLogger()
@@ -157,8 +158,9 @@ class BigGIM(object):
             genepairs containing ids1 will be considered
         columns : str
             Which BigGIM table column to consider.
-        average_columns : Bool, 
-            TODO: ???
+        average_columns : Bool
+            If True, the data are averaged (ignoring nans). This is done on the
+            client side instead of the server (API side)
         limit : int
             Maximum number of genepair to consider
         restriction_join: bool 
@@ -190,15 +192,15 @@ class BigGIM(object):
             logging.info(f"Found the following columns in BigGIM: {validated_columns}")
             
         else: 
-            columns = None # This is strip columns from the input, resulting in all columns being returned
+            validated_columns = None # This is strip columns from the input, resulting in all columns being returned
 
         validated_columns = ','.join(validated_columns)
-        
+
+        # average_columns is left off to be averaged later 
         kwargs = {
             'ids1': ids1, 
             'ids2': ids2, 
             'columns': validated_columns, 
-            'average_columns': average_columns, 
             'limit': limit, 
             'restriction_join': restriction_join, 
             'restriction_bool': restriction_bool, 
@@ -233,7 +235,7 @@ class BigGIM(object):
             self.wait_for_query(timelimit=wait_time)
 
         if to_dataframe: 
-            return self.convert_result_to_dataframe()
+            return self.convert_result_to_dataframe(average_columns=average_columns)
 
         return self
 
@@ -269,7 +271,7 @@ class BigGIM(object):
 
         return self
 
-    def convert_result_to_dataframe(self): 
+    def convert_result_to_dataframe(self, average_columns=False): 
         """Retrieve the results and convert it into a single dataframe
     
         The first column is dropped right now (not sure why) TODO    
@@ -286,6 +288,9 @@ class BigGIM(object):
             [pd.read_csv(i) for i in self.request_uri]
         ).iloc[:, 1:]
 
+        if average_columns: 
+            df['mean'] = df.iloc[:, 2:].apply(np.nanmean, axis=1)
+        
         self.result_dataframe = df
 
         return self
@@ -304,7 +309,7 @@ class BigGIM(object):
 
         return self
 
-    def get_result_genes(self, n=None, sort_ascending=False):
+    def get_result_genes(self, column='mean', n=None, sort_ascending=False):
         """Get genes ranked by the BigGIM interaction results
 
         TODO: Make aggregation method visible
@@ -321,6 +326,9 @@ class BigGIM(object):
         if not hasattr(self, "result_dataframe"): 
             raise ValueError("No result_dataframe found. Try submitting "
                 "a query and converting to dataframe") 
+        
+        if n is None: 
+            n = inf
 
         df  = (self.result_dataframe
             .sort_values(by='mean',ascending=sort_ascending)
@@ -329,13 +337,13 @@ class BigGIM(object):
 
         # del df['index'] #drop should make this not necessary
 
-        expanded_genes = set(self.query_payload['ids1'].copy())
+        expanded_genes = set(self.query_payload['ids1'].split(','))
         for _, row in df.iterrows():
-            if len(expanded_genes) >= (len(genes)+N):
+            if len(expanded_genes) >= n:
                 break
 
-            expanded_genes = expanded_genes.union([row['Gene1'], row['Gene2']]) 
-         
+            expanded_genes = expanded_genes.union([int(row['Gene1']), int(row['Gene2'])]) 
+
         expanded_genes = sorted([str(int(x)) for x in expanded_genes])
 
         return expanded_genes
