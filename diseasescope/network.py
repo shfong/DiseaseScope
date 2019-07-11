@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 import ndex2
 import networkx as nx
 import scipy
-from py2cytoscape.data.cyrest_client import CyRestClient
 from scipy.sparse import coo_matrix, csc_matrix, csr_matrix, diags, issparse
 from scipy.sparse.linalg import expm_multiply
 
@@ -166,18 +165,10 @@ def sparse_normalize(m, axis=0, inplace=False):
     else:  
         mat = m.copy()
     
-    #logger.debug(mat)
-    #logger.debug(type(mat))
-
     row_index, col_index = mat.nonzero()
     data = mat.data
         
-    #logger.debug(row_index)
-    #logger.debug(col_index)
-
     marginals = np.array(mat.sum(axis=axis)).ravel()
-
-    #logger.debug(marginals)
 
     data = data/marginals[row_index if axis else col_index]
     mat.data = data
@@ -611,89 +602,6 @@ class NxNetwork(Network):
 
         return uuid
 
-
-    def view(
-        self,
-        attributes="Heat",
-        vmin=0,
-        vmax=1,
-        cmap=plt.cm.Blues
-    ):
-        """Plot the subgraph
-        Parameters
-        ----------
-        name : str
-            The key in self.graphs that contains the graph
-        attributes : str
-            The node attributes on the network (in self.graphs) to be
-            visualized. Note that this means, `annotate_network` should
-            be used first to add the node attributes
-        vmin : float
-            The lower end of the colorbar
-        vmax : float
-            The upper end of the colorbar
-        cmap :
-            Matplotlib colormap object
-        """
-
-        fig, ax = plt.subplots()
-
-        attr = nx.get_node_attributes(self.network, attributes)
-
-        #TODO: replace missing except behavior with default fall back value
-        try:
-            vals = [attr[i] for i in self.network.nodes()]
-        except KeyError:
-            warnings.warn(
-                "The specified graph does not have the attribute %s. Replacing values with 0." % attributes
-            )
-            vals = [0 for _ in self.network.nodes()]
-
-        nx.draw(
-            self.network,
-            ax=ax,
-            node_color=vals,
-            labels=self.node_2_name,
-            vmin=vmin,
-            vmax=vmax,
-            cmap=cmap
-        )
-
-        sm = plt.cm.ScalarMappable(cmap=plt.cm.Blues,
-            norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax)
-        )
-
-        sm._A = []
-        plt.colorbar(sm)
-
-        return fig, ax
-
-
-    def view_in_cytoscape(self):
-        """Ports graph to Cytoscape"""
-
-        if not hasattr(self, "cyrest"):
-            self.cyrest = CyRestClient()
-
-        hdl = self.cyrest.network.create_from_networkx(self.network)
-        self.cyrest.layout.apply(name='degree-circle', network=hdl)
-
-        return self
-
-
-    def local_neighborhood(self, center_name=None, center_id=None, neighbors=1): 
-        if center_name is not None and center_id is not None: 
-            raise ValueError("Either center_name or center_id can be supplied.")
-
-        if center_name is not None: 
-            center_id = self.name_2_node[center_name] 
-
-
-        nodes = get_neighbors(self.network, neighbors, center_id) 
-
-        return self.subgraph(node_ids = nodes)
-
-
 class IgNetwork(Network): 
     """Internal object to expose igraph functionalities"""
 
@@ -801,51 +709,3 @@ class IgNetwork(Network):
             self.network.vs[attr_name] = attr
 
         return self
-
-    # def collapse_duplicate_nodes(self, attribute, inplace=False): 
-    #     """Collapse any nodes with the same attribute into a single node"""
-        
-    #     if not inplace: 
-    #         g = self.network.copy()
-    #     else:
-    #         g = self.network
-        
-    #     duplicated_nodes_table = self.node_table.loc[
-    #         self.node_table[attribute].duplicated(keep=False)
-    #     ]
-        
-    #     counter = len(g.vs)
-    #     nodemap = {}
-    #     for a, df in duplicated_nodes_table.groupby(attribute): 
-    #         for ind, i in enumerate(df.index): 
-    #             if ind == 0: 
-    #                 g.add_vertex(**g.vs[i].attributes())
-                    
-    #             nodemap[i] = counter
-                
-    #         counter += 1
-            
-    #     nodeslist = list(nodemap.keys())
-
-    #     source = set([e.tuple for e in g.es.select(_source_in=nodeslist)])
-    #     target = set([e.tuple for e in g.es.select(_target_in=nodeslist)])
-    #     affected_edges = source.union(target)
-        
-    #     new_edges = [(nodemap.get(i,i), nodemap.get(j,j)) for i,j in affected_edges]
-    #     new_edges = [(i,j) for i,j in new_edges if i != j]
-
-    #     return new_edges, affected_edges, nodeslist
-        
-    #     g.add_edges(new_edges)       
-        
-    #     g.delete_edges(affected_edges)
-    #     g.delete_vertices(nodeslist)
-            
-    #     if inplace: 
-    #         self.network = g
-    #         self.refresh_node_table()
-
-    #         return self
-        
-    #     else: 
-#         return g

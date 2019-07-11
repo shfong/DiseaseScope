@@ -15,7 +15,7 @@ class DiseaseScope(object):
     def __init__(self, doid, disease):
         # self._check_doid(doid)
         self.doid = doid
-        self.disease = disease # TODO: Look this up
+        self.disease = disease # TODO: Look this up so the disease is not needed
 
     def get_disease_genes(self, method='biothings'): 
         if method == 'biothings':
@@ -72,6 +72,8 @@ class DiseaseScope(object):
             self.network = self.biggim.result_dataframe[['Gene1', 'Gene2', 'mean']]
 
         elif method == 'ndex':
+            if 'uuid' not in kwargs: 
+                raise ValueError("uuid is missing from keyword arguments!")
             network = ndex2.create_nice_cx_from_server(
                 server='public.ndexbio.org', 
                 uuid=kwargs['uuid'], 
@@ -105,6 +107,7 @@ class DiseaseScope(object):
 
         else: 
             raise ValueError("Invalid method!")
+
 
     def _check_doid(self, doid): 
         raise NotImplementedError
