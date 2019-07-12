@@ -7,7 +7,6 @@ import mygene
 import numpy as np
 import pandas as pd
 
-import igraph as ig
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import ndex2
@@ -16,11 +15,8 @@ import scipy
 from scipy.sparse import coo_matrix, csc_matrix, csr_matrix, diags, issparse
 from scipy.sparse.linalg import expm_multiply
 
-from .utils import get_neighbors
-
 
 def igraph_adj_matrix(G, weighted=False): 
-
     source, target, weights = zip(*[(i.source, i.target, i[weighted] if weighted else 1) for i in G.es])
 
     n_nodes = len(G.vs)
@@ -366,7 +362,7 @@ class Network(ABC):
     @property
     def node_table(self): 
         if not hasattr(self, "_node_table"): 
-            self._node_table = pd.DataFrame.from_dict(self.get_node_attributes()).T
+            self._node_table = pd.DataFrame.from_dict(dict(self.get_node_attributes())).T
             self._node_table = self._node_table.fillna(0)
 
         return self._node_table
@@ -411,6 +407,44 @@ class Network(ABC):
             obj = pickle.load(f) 
 
         return obj
+
+    def random_walk(
+        self, 
+        node_attr, 
+        alpha, 
+        add_heat=False, 
+        heat_name='diffused heat',
+        **kwargs
+    ): 
+
+        """Perform random walk"""
+
+        if isinstance(node_attr, str):
+            node_attr = [node_attr]
+
+        if isinstance(heat_name, str): 
+            heat_name = [heat_name]
+
+        if len(node_attr) != len(heat_name): 
+            raise ValueError("node_attr and heat_name needs to have the same number of names!")
+
+        heat = self.node_table.loc[list(self.node_ids), node_attr].values.T
+        heat = random_walk_rst(heat, self.adjacency_matrix, alpha, **kwargs)
+        heat = np.array(heat.todense())
+        
+        new_attr = {
+            name: {k:v for k,v in zip(self.node_ids, row)} 
+                for name, row in zip(heat_name, heat)
+        }
+
+        if add_heat: 
+            self.set_node_attributes(new_attr)
+            self.refresh_node_table()
+
+            return self
+
+        return new_attr
+            
 
 class NxNetwork(Network): 
     """Internal object to expose networkx functionalities"""
@@ -500,7 +534,7 @@ class NxNetwork(Network):
 
 
     def get_node_attributes(self): 
-        return self.network.node
+        return self.network.nodes(data=True) # networkx > 2
 
 
     def set_node_attributes(self, attr_map, namespace="nodenames"):
@@ -510,9 +544,11 @@ class NxNetwork(Network):
 
             nx.set_node_attributes(
                 self.network, 
-                attr_name, 
-                d
-            )
+                d,
+                name=attr_name
+            ) # updated to networkx2
+
+        self.refresh_node_table()
 
         return self
 
@@ -606,6 +642,8 @@ class IgNetwork(Network):
     """Internal object to expose igraph functionalities"""
 
     def __init__(self, network=None, node_name="name"): 
+        import igraph as ig
+
         super().__init__(network, node_name=node_name) 
 
         if network is not None: 
