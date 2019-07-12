@@ -5,6 +5,7 @@
 import ndex2
 
 from .biggim import BigGIM
+from .disgenet import DisGeNet
 from .doid_to_genes import doid_to_genes_direct
 from .doid_to_tissues import get_tissue_from_pmc_w2v
 from .ddot import DDOT_Client
@@ -17,12 +18,19 @@ class DiseaseScope(object):
         self.doid = doid
         self.disease = disease # TODO: Look this up so the disease is not needed
 
+
     def get_disease_genes(self, method='biothings'): 
         if method == 'biothings':
             self.genes = doid_to_genes_direct(self.doid)
+
+        elif method == 'disgenet':
+            self.disgenet = DisGeNet()
+            self.disgenet.query_disease_genes(self.doid, namespace='do')
+            self.genes = self.disgenet.get_top_genes()
         
         else: 
             raise ValueError("Invalid method!")
+
     
     def get_disease_tissues(self, method='pubmed'): 
         if method == 'pubmed': 
@@ -30,6 +38,7 @@ class DiseaseScope(object):
         
         else: 
             raise ValueError("Invalid method!")
+
 
     def expand_gene_set(self, n=250, method='biggim', **kwargs):
         if method == 'biggim': 
@@ -53,6 +62,7 @@ class DiseaseScope(object):
 
         else: 
             raise ValueError("Invalid method!")
+
 
     def get_network(self, method='biggim', **kwargs): 
         if method == 'biggim': 
@@ -82,6 +92,7 @@ class DiseaseScope(object):
 
         else: 
             raise ValueError("Invalid method!")
+
 
     def infer_hierarchical_model(
         self, 
