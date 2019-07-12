@@ -97,7 +97,7 @@ def random_walk_rst(
     return F_t
 
 
-def heat_diffusion(laplacian, heat, start=0, end=0.1): 
+def heat_diffusion(heat, laplacian, start=0, end=0.1): 
     """Heat diffusion 
     Iterative matrix multiplication between the graph laplacian and heat
     """
@@ -436,6 +436,30 @@ class Network(ABC):
             name: {k:v for k,v in zip(self.node_ids, row)} 
                 for name, row in zip(heat_name, heat)
         }
+
+        if add_heat: 
+            self.set_node_attributes(new_attr)
+            self.refresh_node_table()
+
+            return self
+
+        return new_attr
+
+    def heat_diffusion(
+        self, 
+        node_attr, 
+        add_heat=False, 
+        heat_name='diffused heat', 
+        **kwargs, 
+    ):
+
+        if not isinstance(node_attr, str):
+            raise ValueError("node_attr must be a str. heat_diffusion cannot handle more than one attribute")
+
+        heat = self.node_table.loc[list(self.node_ids), node_attr].values
+        heat = heat_diffusion(heat, self.laplacian_matrix, **kwargs)
+        
+        new_attr = {heat_name: {k:v for k,v in zip(self.node_ids, heat)}}
 
         if add_heat: 
             self.set_node_attributes(new_attr)
