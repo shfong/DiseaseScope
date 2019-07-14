@@ -434,7 +434,7 @@ class Network(ABC):
         }
 
         if add_heat: 
-            self.set_node_attributes(new_attr)
+            self.set_node_attributes(new_attr, namespace='node_ids')
             self.refresh_node_table()
 
             return self
@@ -458,7 +458,7 @@ class Network(ABC):
         new_attr = {heat_name: {k:v for k,v in zip(self.node_ids, heat)}}
 
         if add_heat: 
-            self.set_node_attributes(new_attr)
+            self.set_node_attributes(new_attr, namespace="node_ids")
             self.refresh_node_table()
 
             return self
@@ -567,9 +567,9 @@ class NxNetwork(Network):
 
             nx.set_node_attributes(
                 self.network, 
+                attr_name, 
                 d,
-                name=attr_name
-            ) # updated to networkx2
+            ) # TODO: Need to change when nx.__version__ > 2
 
         self.refresh_node_table()
 

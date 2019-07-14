@@ -61,10 +61,10 @@ class DiseaseScope(object):
 
         elif method == 'random walk':
             attr = {'heat': {
-                i:0 if i in self.genes else 1 for i in self.network.nodes()}
+                i:0 if i in self.genes else 1 for i in self.network.node_names}
             }
 
-            self.expanded_genes = (
+            expanded_index = (
                 self.network
                     .set_node_attributes(attr)
                     .random_walk('heat', kwargs['alpha'], add_heat=True, heat_name='random walk score')
@@ -75,22 +75,25 @@ class DiseaseScope(object):
                     .tolist()
             )
 
+            self.expanded_genes = [self.network.node_2_name[i] for i in expanded_index]
         
         elif method == 'heat diffusion': 
             attr = {'heat': {
-                i:0 if i in self.genes else 1 for i in self.network.nodes()}
+                i:0 if i in self.genes else 1 for i in self.network.node_names}
             }
 
-            self.expanded_genes = (
+            expanded_index = (
                 self.network
                     .set_node_attributes(attr)
-                    .heat_diffusion('heat', add_heat=True, heat_name='random walk score')
-                    .node_table['random walk score']
+                    .heat_diffusion('heat', add_heat=True, heat_name='heat diffusion score')
+                    .node_table['heat diffusion score']
                     .sort_values(ascending=False)
                     .iloc[:n]
                     .index
                     .tolist()
             )
+
+            self.expanded_genes = [self.network.node_2_name[i] for i in expanded_index]
 
         else: 
             raise ValueError("Invalid method!")
