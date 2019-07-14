@@ -278,10 +278,6 @@ class Network(ABC):
     def set_node_names(self, attr=None): 
         pass
 
-    # @property 
-    # @abstractmethod 
-    # def node_names(self): 
-    #     pass
 
     def convert_node_names(
         self, 
@@ -468,6 +464,9 @@ class Network(ABC):
             return self
 
         return new_attr
+
+    def get_edge_list(self): 
+        pass
             
 
 class NxNetwork(Network): 
