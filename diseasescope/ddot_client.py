@@ -16,7 +16,7 @@ class DDOT_Client(object):
 
     DDOT_API = PATHS['ddot-api-url'] 
 
-    def __init__(self, filename, verbose=False):
+    def __init__(self, filename, verbose=False, ddot_api_location=None):
         """Constructs the DDOT_caller object from file
         
         Parameters
@@ -36,8 +36,11 @@ class DDOT_Client(object):
         else: 
             raise ValueError("filename is not a valid path!")
 
+        if ddot_api_location is not None: 
+            self.DDOT_API = ddot_api_location
+
     @classmethod 
-    def from_dataframe(cls, dataframe, verbose=False):
+    def from_dataframe(cls, dataframe, verbose=False, ddot_api_location=None):
         """Constructs the DDOT_caller object from pandas DataFrame
 
         Parameters
@@ -56,7 +59,7 @@ class DDOT_Client(object):
         
         filename = cls._save_dataframe(dataframe) 
 
-        return cls(filename, verbose=verbose)
+        return cls(filename, verbose=verbose, ddot_api_location=ddot_api_location)
 
     @staticmethod
     def _save_dataframe(dataframe, path=''):
@@ -163,7 +166,7 @@ class DDOT_Client(object):
 
         return self
 
-    def create_ddot_object(filename="ddot_output.txt", **kwargs): 
+    def create_ddot_object(self, filename="ddot_output.txt", **kwargs): 
         from ddot import Ontology
 
         self.ontology = Ontology.from_table(filename, clixo_format=True, **kwargs)

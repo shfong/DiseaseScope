@@ -103,7 +103,7 @@ class DiseaseScope(object):
 
         return self
 
-    def get_network(self, method='biggim', **kwargs): 
+    def get_network(self, method='biggim',  **kwargs): 
         if method == 'biggim': 
             if not hasattr(self, "biggim"): 
                 self.biggim = BigGIM()
@@ -146,6 +146,8 @@ class DiseaseScope(object):
         method='clixo-api', 
         method_kwargs=None,
         edge_attr='has_edge',
+        ddot_api_location=None,
+        get_ontology_object=False,
     ):
         if method_kwargs is None: 
             method_kwargs = {}
@@ -153,20 +155,42 @@ class DiseaseScope(object):
         if method == 'clixo-api': 
             cols = self.edge_table.columns
             table = self.edge_table[[cols[0], cols[1], edge_attr]]
-            self.ddot_client = DDOT_Client.from_dataframe(table)
+            self.ddot_client = DDOT_Client.from_dataframe(table, ddot_api_location=ddot_api_location)
             (self.ddot_client
                 .call(**method_kwargs)
                 .wait_for_hiview_url()
             )
 
+            self.hiview_url = self.ddot_client.hiview_url
+
+            if get_ontology_object: 
+                self.ddot_client.get_output_file(create_object=True)
+                self.ontology = self.ddot_client.ontology
 
         elif method == 'clixo':
-            try: 
-                import ddot
-            except ImportError("Unable to import DDOT"):
-                raise
+            from ddot import Ontology
 
-            raise NotImplementedError
+            ont = Ontology.run_clixo(
+                self.edge_table, 
+                method_kwargs['alpha'], 
+                method_kwargs['beta'], 
+                clixo_cmd=method_kwargs['clixo_path'],
+            )
+
+            if len(self.edge_table.columns) != 3:
+                #TODO
+                print("future warning about edge table columns")
+
+            ndex_url, _ = ont.to_ndex(
+                method_kwargs['ndex_username'], 
+                method_kwargs['ndex_password'], 
+                method_kwargs.get('ndex_server', 'http://test.ndexbio.org'), 
+                network=self.edge_table, 
+                main_feature=self.edge_table.columns[-1]
+            )
+
+            uuid = ndex_url.split('/')[-1]
+            self.hiview_url = f"http://hiview-test.ucsd.edu/{uuid}?type=test&server=http://dev2.ndexbio.org" 
 
         else: 
             raise ValueError("Invalid method!")
