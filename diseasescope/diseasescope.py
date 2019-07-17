@@ -121,6 +121,8 @@ class DiseaseScope(object):
         else: 
             raise ValueError("Invalid method!")
 
+        return self
+
     
     def get_disease_tissues(self, n=10, method='pubmed'): 
         if method == 'pubmed': 
@@ -131,6 +133,8 @@ class DiseaseScope(object):
         
         else: 
             raise ValueError("Invalid method!")
+
+        return self
 
 
     def expand_gene_set(
@@ -259,6 +263,8 @@ class DiseaseScope(object):
         else: 
             raise ValueError("Invalid method!")
 
+        return self
+
 
     def assign_scope_to_edge_table(self, scopes, update=False): 
         """Assign scope dictionary to gene name columns to edge_table
@@ -381,6 +387,8 @@ class DiseaseScope(object):
 
         else: 
             raise ValueError("Invalid method!")
+
+        return self
 
 
     def _check_doid(self, doid): 

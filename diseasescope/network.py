@@ -7,8 +7,6 @@ import mygene
 import numpy as np
 import pandas as pd
 
-import matplotlib as mpl
-import matplotlib.pyplot as plt
 import ndex2
 import networkx as nx
 import scipy

@@ -13,3 +13,10 @@ pytest-runner==4.2
 
 requests==2.22.0
 gensim==3.7.3
+
+numpy
+pandas
+mygene
+ndex2
+networkx==1.11
+scipy
