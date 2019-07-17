@@ -6,6 +6,7 @@ import mygene
 import ndex2
 import networkx as nx
 import pandas as pd
+from pathlib import Path
 
 from .biggim import BigGIM
 from .disgenet import DisGeNet
@@ -79,10 +80,15 @@ class Genes(list):
 class DiseaseScope(object):
     """Implements the DiseaseScope pipline"""
 
-    def __init__(self, doid, disease):
+    BASE_FILE = Path(__file__).parents[1]
+    DOID_FILE = BASE_FILE / "data" / "doid" / "doid_name_mappings.txt"
+
+    def __init__(self, doid, convert_doid=False):
         # self._check_doid(doid)
         self.doid = doid
-        self.disease = disease # TODO: Look this up so the disease is not needed
+
+        if convert_doid: 
+            self.disease = self.convert_doid(doid)
 
     
     def __repr__(self): 
@@ -99,6 +105,33 @@ class DiseaseScope(object):
         line = f"DiseaseScope query \"{self.disease} (DOID: {self.doid})\" with attributes {', '.join(names_found)}"
 
         return line
+
+    
+    def load_doid_mapping(self, doid_mapping_file = None):
+        if doid_mapping_file is None: 
+            doid_mapping_file = self.DOID_FILE
+
+        doid_name_mapping = {}
+        with open(doid_mapping_file) as f: 
+            for line in f: 
+                if line[0] == "#": 
+                    continue
+
+                key, value = line.split("%")
+                doid_name_mapping[key.strip()] = value.strip()
+
+        self.doid_name_mapping = doid_name_mapping
+
+        return self
+
+
+    def convert_doid(self, doid, load_mapping_file=False):
+        if load_mapping_file or not hasattr(self, "doid_name_mapping"): 
+            self.load_doid_mapping()
+
+        key = f"DOID:{doid}"
+
+        return self.doid_name_mapping[key]
 
 
     def get_disease_genes(self, method='biothings'): 
