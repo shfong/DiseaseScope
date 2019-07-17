@@ -5,6 +5,7 @@
 import mygene
 import ndex2
 import networkx as nx
+import pandas as pd
 
 from .biggim import BigGIM
 from .disgenet import DisGeNet
@@ -33,16 +34,30 @@ class Genes(list):
         super().__init__(inList)
         self.scope = scope
         self.source = source
+        self.name_map = {}
         
     def convert_scope(
         self, 
         newscope, 
         inplace=False, 
-        return_dataframe=False, 
         species="human"
     ):
         """Converts a list of genes from one scope to another"""
-   
+
+        name_map = self.create_name_map(newscope, 
+             return_dataframe=False, species=species)
+
+        newList = [name_map[(self.scope, newscope)].get(i, i) for i in self]
+
+        if inplace: 
+            return self.__init__(newList, newscope)
+        
+        else: 
+            return Genes(newList, newscope)
+
+    def create_name_map(self, newscope, return_dataframe=False, species="human"):
+        """Creates a dictionary mapping items in the list to a new name"""
+
         mg = mygene.MyGeneInfo()
         out = mg.querymany(
             self, 
@@ -52,18 +67,16 @@ class Genes(list):
             as_dataframe=True
         )
 
-        name_map = out[newscope].to_dict()
-        newList = [name_map.get(i, i) for i in self]
-        
-
-        if inplace: 
-            return self.__init__(newList, newscope)
-
-        elif return_dataframe:
+        if return_dataframe: 
             return out
-        
+
+        if hasattr(self, "name_map"): 
+            self.name_map[(self.scope, newscope)] = out[newscope].to_dict()  
         else: 
-            return Genes(newList, newscope)
+            self.name_map = {(self.scope, newscope): out[newscope].to_dict()}
+
+        return self.name_map
+
 
 
 class DiseaseScope(object):
@@ -76,8 +89,8 @@ class DiseaseScope(object):
 
     
     def __repr__(self): 
-        attr_names = ["seed genes", "genes", "network", "hiview_url"] 
-        attrs = ["genes", "expanded_genes", "network", "hiview_url"]
+        attr_names = ["seed genes", "genes", "tissues", "network", "hiview_url"] 
+        attrs = ["genes", "expanded_genes", "tissues", "network", "hiview_url"]
 
         names_found = []
         for name, attr in zip(attr_names, attrs): 
@@ -112,9 +125,9 @@ class DiseaseScope(object):
             raise ValueError("Invalid method!")
 
     
-    def get_disease_tissues(self, method='pubmed'): 
+    def get_disease_tissues(self, n=10, method='pubmed'): 
         if method == 'pubmed': 
-            self.tissues = get_tissue_from_pmc_w2v(self.disease)
+            self.tissues = get_tissue_from_pmc_w2v(self.disease, n=n)
 
         elif method == 'biothings': 
             raise NotImplementedError
@@ -123,17 +136,42 @@ class DiseaseScope(object):
             raise ValueError("Invalid method!")
 
 
-    def expand_gene_set(self, n=250, method='biggim', add_subnetwork=False,**kwargs):
+    def expand_gene_set(
+        self, 
+        n=250, 
+        tissue_by_rank=0, 
+        method='biggim', 
+        add_subnetwork=False,
+        **kwargs
+    ):
+
+        """Expand the seed gene set
+
+        Parameters
+        ----------
+        n : int
+            Number of total genes to receive
+        tissue_by_rank : int
+            Which tissue to select (0-index) from the `tissues` attribute
+        method : str
+            The method used to expand the gene set. Valid options include 
+            `biggim`, `random_walk`, `heat_diffusion`. 
+        add_subnetwork : bool
+            If True, a new attribute will be created called `subgraph` which is
+            a subgraph of the current network, by selecting all the nodes 
+            returned from `expand_gene_set`.
+        """
+
         if method == 'biggim': 
             self.biggim = BigGIM()
             self.biggim.query(
                 ','.join(self.genes), 
-                tissues=self.tissues[0],
+                tissues=self.tissues[tissue_by_rank]['tissue'],
                 wait_for_query=True, 
                 wait_time=1_000_000, 
                 to_dataframe=True, 
                 average_columns=True, 
-                limit=kwargs.get("limit",10_000),
+                limit=kwargs.get("limit",100_000),
             )
         
             self.expanded_genes = Genes(self.biggim.get_result_genes(n=n), "entrezgene")
@@ -182,7 +220,7 @@ class DiseaseScope(object):
 
         return self
 
-    def get_network(self, method='biggim',  **kwargs): 
+    def get_network(self, tissue_by_rank=0, method='biggim',  **kwargs): 
         if method == 'biggim': 
             if not hasattr(self, "biggim"): 
                 self.biggim = BigGIM()
@@ -190,15 +228,19 @@ class DiseaseScope(object):
             self.biggim.query(
                 ','.join(self.expanded_genes), 
                 ids2=','.join(self.expanded_genes), 
-                tissues=self.tissues[0], 
+                tissues=self.tissues[tissue_by_rank]['tissue'], 
                 wait_for_query=True, 
                 wait_time=1_000_000, 
                 to_dataframe=True, 
                 average_columns=True,
-                limit=kwargs.get("limit", 10_000)
+                limit=kwargs.get("limit", 100_000)
             )
 
             self.edge_table = self.biggim.result_dataframe[['Gene1', 'Gene2', 'mean']] #TODO: Move these column names to attribute
+            self.assign_scope_to_edge_table(
+                {'Gene1': self.expanded_genes.scope, 'Gene2': self.expanded_genes.scope}
+            )
+
             if kwargs.get('to_network'):
                 dG = nx.from_pandas_dataframe(self.edge_table, 'Gene1', 'Gene2', edge_attr=True)
                 self.network = NxNetwork(dG)
@@ -219,6 +261,59 @@ class DiseaseScope(object):
 
         else: 
             raise ValueError("Invalid method!")
+
+
+    def assign_scope_to_edge_table(self, scopes): 
+        """Assign scope dictionary to gene name columns to edge_table
+
+        Paramters
+        ---------
+        scopes : dict
+            edge_table columns to scope map
+        """
+
+        if not all([scope in self.edge_table.columns for scope in scopes]): 
+            raise ValueError("keys to scopes are not in edge_table columns.")
+
+        self.edge_table.scopes = scopes
+
+        return self
+    
+    def convert_edge_table_names(
+        self, 
+        columns, 
+        newscope, 
+        keep=False,
+        species="human"
+    ):
+        """Convert gene names in edge_table
+
+        Note: Assume all columns to have the same scope!
+        """
+        if not hasattr(self, "edge_table"): 
+            raise ValueError("No edge_table found!")
+
+        if not hasattr(self.edge_table, "scopes"): 
+            raise ValueError("DataFrame `edge_table` does not have `scopes` " 
+                "attribute. Please assign the correct scope for the "
+                "gene names by running `assign_scope_to_edge_table`.") 
+
+        if (self.edge_table.scope[columns[0]], newscope) not in self.expanded_genes.name_map:
+            name_map=self.expanded_genes.create_name_map(newscope, species="human")
+
+        else: 
+            name_map = self.expanded_genes.name_map
+
+        new_columns = self.edge_table[columns].applymap(lambda x:name_map.get(x,x))
+
+        if keep: 
+            new_columns.columns = [f"{i}_{newscope}" for i in new_columns.columns]
+            self.edge_table = pd.concat([self.edge_table, new_columns], axis=1)
+
+        else: 
+            self.edge_table.loc[:, columns] = new_columns
+
+        return self
 
 
     def infer_hierarchical_model(
@@ -250,7 +345,7 @@ class DiseaseScope(object):
         elif method == 'clixo':
             from ddot import Ontology
 
-            ont = Ontology.run_clixo(
+            self.ontology = Ontology.run_clixo(
                 self.edge_table, 
                 method_kwargs['alpha'], 
                 method_kwargs['beta'], 
@@ -262,7 +357,7 @@ class DiseaseScope(object):
                 #TODO
                 print("future warning about edge table columns")
 
-            ndex_url, _ = ont.to_ndex(
+            ndex_url, _ = self.ontology.to_ndex(
                 method_kwargs['ndex_username'], 
                 method_kwargs['ndex_password'], 
                 method_kwargs.get('ndex_server', 'http://test.ndexbio.org'), 

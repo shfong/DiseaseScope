@@ -288,6 +288,8 @@ class BigGIM(object):
             [pd.read_csv(i) for i in self.request_uri]
         ).iloc[:, 1:]
 
+        df = df.astype({'Gene1': str, 'Gene2': str})
+
         if average_columns: 
             df['mean'] = df.iloc[:, 2:].apply(np.nanmean, axis=1)
         
