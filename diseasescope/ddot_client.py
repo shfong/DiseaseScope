@@ -141,6 +141,7 @@ class DDOT_Client(object):
                 
             else:
                 r = requests.get(self.location)
+                print(r.json())
                 self.hiview_url = r.json()['result']['hiviewurl']
 
                 if self.hiview_url: 

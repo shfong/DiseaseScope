@@ -2,6 +2,7 @@
 
 """Main module."""
 
+import mygene
 import ndex2
 import networkx as nx
 
@@ -11,6 +12,32 @@ from .doid_to_genes import doid_to_genes_direct
 from .doid_to_tissues import get_tissue_from_pmc_w2v
 from .ddot_client import DDOT_Client
 from .network import NxNetwork 
+
+
+class Genes(list): 
+    """List object to embed additional attributes"""
+    def __init__(self, inList, scope):
+        super().__init__(inList)
+        self.scope = scope
+        
+    def convert_scope(self, newscope, inplace=False, return_dataframe=False, species="human"):
+        """Converts a list of genes from one scope to another"""
+        mg = mygene.MyGeneInfo()
+        out = mg.querymany(self, scopes=self.scope, fields=newscope, species=species, as_dataframe=True)
+
+        name_map = out[newscope].to_dict()
+        newList = [name_map.get(i, i) for i in self]
+        
+
+        if inplace: 
+            return self.__init__(newList, newscope)
+
+        elif return_dataframe:
+            return out
+        
+        else: 
+            return Genes(newList, newscope)
+
 
 class DiseaseScope(object):
     """Implements the DiseaseScope pipline"""
@@ -23,12 +50,12 @@ class DiseaseScope(object):
 
     def get_disease_genes(self, method='biothings'): 
         if method == 'biothings':
-            self.genes = doid_to_genes_direct(self.doid)
+            self.genes = Genes(doid_to_genes_direct(self.doid), "entrezgene") 
 
         elif method == 'disgenet':
             self.disgenet = DisGeNet()
             self.disgenet.query_disease_genes(self.doid, namespace='do')
-            self.genes = self.disgenet.get_top_genes()
+            self.genes = Genes(self.disgenet.get_top_genes(), "symbol")
         
         else: 
             raise ValueError("Invalid method!")
@@ -54,10 +81,11 @@ class DiseaseScope(object):
                 wait_for_query=True, 
                 wait_time=1_000_000, 
                 to_dataframe=True, 
-                average_columns=True,
+                average_columns=True, 
+                limit=kwargs.get("limit",10_000),
             )
         
-            self.expanded_genes = self.biggim.get_result_genes(n=n)
+            self.expanded_genes = Genes(self.biggim.get_result_genes(n=n), "entrezgene")
 
         elif method == 'random walk':
             attr = {'heat': {
@@ -75,7 +103,7 @@ class DiseaseScope(object):
                     .tolist()
             )
 
-            self.expanded_genes = [self.network.node_2_name[i] for i in expanded_index]
+            self.expanded_genes = Genes([self.network.node_2_name[i] for i in expanded_index], "entrezgene")
         
         elif method == 'heat diffusion': 
             attr = {'heat': {
@@ -93,7 +121,7 @@ class DiseaseScope(object):
                     .tolist()
             )
 
-            self.expanded_genes = [self.network.node_2_name[i] for i in expanded_index]
+            self.expanded_genes = Genes([self.network.node_2_name[i] for i in expanded_index], "entrezgene")
 
         else: 
             raise ValueError("Invalid method!")
@@ -116,11 +144,12 @@ class DiseaseScope(object):
                 wait_time=1_000_000, 
                 to_dataframe=True, 
                 average_columns=True,
+                limit=kwargs.get("limit", 10_000)
             )
 
             self.edge_table = self.biggim.result_dataframe[['Gene1', 'Gene2', 'mean']] #TODO: Move these column names to attribute
             if kwargs.get('to_network'):
-                dG = nx.from_pandas_edgelist(self.edge_table, 'Gene1', 'Gene2', edge_attr=True)
+                dG = nx.from_pandas_dataframe(self.edge_table, 'Gene1', 'Gene2', edge_attr=True)
                 self.network = NxNetwork(dG)
 
         elif method == 'ndex':
@@ -175,6 +204,7 @@ class DiseaseScope(object):
                 method_kwargs['alpha'], 
                 method_kwargs['beta'], 
                 clixo_cmd=method_kwargs['clixo_path'],
+                clixo_version=method_kwargs['clixo_version'],
             )
 
             if len(self.edge_table.columns) != 3:
