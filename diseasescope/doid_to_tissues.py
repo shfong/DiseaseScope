@@ -2,7 +2,7 @@
 
 import requests
 
-def get_tissue_from_pmc_w2v(disease, n=5): 
+def get_tissue_from_pmc_w2v(disease, n=5, sep="_"): 
     """Calls GetTissue API (Experimental)
     
     Parameters
@@ -14,10 +14,11 @@ def get_tissue_from_pmc_w2v(disease, n=5):
     """
 
     out = requests.post(
-        "http://secret.ndexbio.org:8085/", 
+        "http://diseasescope.ucsd.edu:8085/",
         data={
             'disease': disease,
-            'n': n
+            'n': n,
+            "sep":sep,
         }
     )
     

@@ -2,7 +2,6 @@ import requests
 import json
 import numpy as np 
 import pandas as pd
-import matplotlib.pyplot as plt
 
 class DisGeNet(object): 
     URL = "http://disgenet.org/api/gda/disease/"
@@ -39,6 +38,8 @@ class DisGeNet(object):
             return list(set(self.result.sort_values(by='score', ascending=False)['gene_symbol'].values[:top_n]))
 
     def plot_score(self): 
+        import matplotlib.pyplot as plt
+
         y = np.sort(self.result['score'].values)
         x = np.arange(len(y))
 

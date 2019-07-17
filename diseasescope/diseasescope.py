@@ -15,15 +15,42 @@ from .network import NxNetwork
 
 
 class Genes(list): 
-    """List object to embed additional attributes"""
-    def __init__(self, inList, scope):
+    """List object to embed additional attributes
+
+    Parameters
+    ---------- 
+    inList : list
+        List-like object used to instantiate the list
+    scope : str
+        Scope of the gene names. Used in `convert_scope` to convert
+        between scopes
+    source : str
+        Additional string to keep track of where the genes came from.
+        Str is not explicitly used for any methods.
+    """
+
+    def __init__(self, inList, scope, source=None):
         super().__init__(inList)
         self.scope = scope
+        self.source = source
         
-    def convert_scope(self, newscope, inplace=False, return_dataframe=False, species="human"):
+    def convert_scope(
+        self, 
+        newscope, 
+        inplace=False, 
+        return_dataframe=False, 
+        species="human"
+    ):
         """Converts a list of genes from one scope to another"""
+   
         mg = mygene.MyGeneInfo()
-        out = mg.querymany(self, scopes=self.scope, fields=newscope, species=species, as_dataframe=True)
+        out = mg.querymany(
+            self, 
+            scopes=self.scope, 
+            fields=newscope, 
+            species=species, 
+            as_dataframe=True
+        )
 
         name_map = out[newscope].to_dict()
         newList = [name_map.get(i, i) for i in self]
@@ -47,15 +74,39 @@ class DiseaseScope(object):
         self.doid = doid
         self.disease = disease # TODO: Look this up so the disease is not needed
 
+    
+    def __repr__(self): 
+        attr_names = ["seed genes", "genes", "network", "hiview_url"] 
+        attrs = ["genes", "expanded_genes", "network", "hiview_url"]
+
+        names_found = []
+        for name, attr in zip(attr_names, attrs): 
+            if hasattr(self, attr): 
+                names_found.append(name)
+
+                #TODO: Add statistics about attributes? 
+
+        line = f"DiseaseScope query \"{self.disease} (DOID: {self.doid})\" with attributes {', '.join(names_found)}"
+
+        return line
+
 
     def get_disease_genes(self, method='biothings'): 
         if method == 'biothings':
-            self.genes = Genes(doid_to_genes_direct(self.doid), "entrezgene") 
+            self.genes = Genes(
+                doid_to_genes_direct(self.doid), 
+                "entrezgene",
+                source="biothings",
+            ) 
 
         elif method == 'disgenet':
             self.disgenet = DisGeNet()
             self.disgenet.query_disease_genes(self.doid, namespace='do')
-            self.genes = Genes(self.disgenet.get_top_genes(), "symbol")
+            self.genes = Genes(
+                self.disgenet.get_top_genes(), 
+                "symbol",
+                source="disgenet",
+            )
         
         else: 
             raise ValueError("Invalid method!")
