@@ -47,7 +47,7 @@ class Genes(list):
         name_map = self.create_name_map(newscope, 
              return_dataframe=False, species=species)
 
-        newList = [name_map[(self.scope, newscope)].get(i, i) for i in self]
+        newList = [name_map.get(i, i) for i in self]
 
         if inplace: 
             return self.__init__(newList, newscope)
@@ -70,10 +70,7 @@ class Genes(list):
         if return_dataframe: 
             return out
 
-        if hasattr(self, "name_map"): 
-            self.name_map[(self.scope, newscope)] = out[newscope].to_dict()  
-        else: 
-            self.name_map = {(self.scope, newscope): out[newscope].to_dict()}
+        self.name_map = out[newscope].to_dict()
 
         return self.name_map
 
@@ -263,8 +260,10 @@ class DiseaseScope(object):
             raise ValueError("Invalid method!")
 
 
-    def assign_scope_to_edge_table(self, scopes): 
+    def assign_scope_to_edge_table(self, scopes, update=False): 
         """Assign scope dictionary to gene name columns to edge_table
+
+        #TODO: Might be deprecated
 
         Paramters
         ---------
@@ -275,43 +274,55 @@ class DiseaseScope(object):
         if not all([scope in self.edge_table.columns for scope in scopes]): 
             raise ValueError("keys to scopes are not in edge_table columns.")
 
-        self.edge_table.scopes = scopes
+        if update: 
+            self.edge_table_scopes.update(scopes)
+        else: 
+            self.edge_table_scopes = scopes
 
         return self
     
     def convert_edge_table_names(
         self, 
-        columns, 
+        columns,
+        scope, 
         newscope, 
         keep=False,
         species="human"
     ):
-        """Convert gene names in edge_table
+        """Convert gene names in edge_table"""
 
-        Note: Assume all columns to have the same scope!
-        """
         if not hasattr(self, "edge_table"): 
             raise ValueError("No edge_table found!")
 
-        if not hasattr(self.edge_table, "scopes"): 
-            raise ValueError("DataFrame `edge_table` does not have `scopes` " 
-                "attribute. Please assign the correct scope for the "
-                "gene names by running `assign_scope_to_edge_table`.") 
-
-        if (self.edge_table.scope[columns[0]], newscope) not in self.expanded_genes.name_map:
-            name_map=self.expanded_genes.create_name_map(newscope, species="human")
-
-        else: 
-            name_map = self.expanded_genes.name_map
+        genes = set(self.edge_table[columns].values.ravel().tolist())
+        mg = mygene.MyGeneInfo()
+        out = mg.querymany(
+            genes, 
+            scopes=scope, 
+            fields=newscope, 
+            species=species, 
+            as_dataframe=True
+        )
+        name_map = out[newscope].to_dict()
 
         new_columns = self.edge_table[columns].applymap(lambda x:name_map.get(x,x))
 
-        if keep: 
-            new_columns.columns = [f"{i}_{newscope}" for i in new_columns.columns]
+        if keep:
+            new_column_names = [f"{i}_{newscope}" for i in new_columns.columns]
+            new_columns.columns = new_column_names 
+
             self.edge_table = pd.concat([self.edge_table, new_columns], axis=1)
+            self.assign_scope_to_edge_table(
+                {name:newscope for name in new_column_names}, 
+                update=True
+            )
 
         else: 
             self.edge_table.loc[:, columns] = new_columns
+            self.assign_scope_to_edge_table(
+                {name:newscope for name in columns}, 
+                update=True
+            )
 
         return self
 
