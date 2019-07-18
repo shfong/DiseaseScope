@@ -77,7 +77,6 @@ class Genes(list):
         return self.name_map
 
 
-
 class DiseaseScope(object):
     """Implements the DiseaseScope pipline"""
 
@@ -86,16 +85,20 @@ class DiseaseScope(object):
     GENESET_FILE = BASE_FILE / "data" / "genesets" / "combined_genesets.txt"
     PCNET_UUID = "f93f402c-86d4-11e7-a10d-0ac135e8bacf"
 
-    def __init__(self, doid, convert_doid=False):
+    def __init__(self, doid, convert_doid=False,
+                 doid_mapping_file=DOID_FILE,
+                 geneset_file=GENESET_FILE):
         # self._check_doid(doid)
         self.doid = doid
+        self.doid_mapping_file = doid_mapping_file
+        self.geneset_file = geneset_file
 
         if convert_doid: 
             self.disease = self.convert_doid(doid)
 
     
     def __repr__(self): 
-        attr_names = ["seed genes", "genes", "tissues", "network", "hiview_url"] 
+        attr_names = ["seed genes", "genes", "tissues", "network", "hiview_url"]
         attrs = ["genes", "expanded_genes", "tissues", "network", "hiview_url"]
 
         names_found = []
@@ -112,7 +115,7 @@ class DiseaseScope(object):
     
     def load_doid_mapping(self, doid_mapping_file = None):
         if doid_mapping_file is None: 
-            doid_mapping_file = self.DOID_FILE
+            doid_mapping_file = self.doid_mapping_file
 
         doid_name_mapping = {}
         with open(doid_mapping_file) as f: 
@@ -376,6 +379,7 @@ class DiseaseScope(object):
         edge_attr='has_edge',
         ddot_api_location=None,
         get_ontology_object=False,
+        temp_path=''
     ):
         if method_kwargs is None: 
             method_kwargs = {}
@@ -383,7 +387,8 @@ class DiseaseScope(object):
         if method == 'clixo-api': 
             cols = self.edge_table.columns
             table = self.edge_table[[cols[0], cols[1], edge_attr]]
-            self.ddot_client = DDOT_Client.from_dataframe(table, ddot_api_location=ddot_api_location)
+            self.ddot_client = DDOT_Client.from_dataframe(table, ddot_api_location=ddot_api_location,
+                                                          temp_path=temp_path)
             (self.ddot_client
                 .call(**method_kwargs)
                 .wait_for_hiview_url()
@@ -428,7 +433,7 @@ class DiseaseScope(object):
                 )
 
                 uuid = ndex_url.split('/')[-1]
-                self.hiview_url = f"http://hiview-test.ucsd.edu/{uuid}?type=test&server=http://dev2.ndexbio.org" 
+                self.hiview_url = f"http://hiview-test.ucsd.edu/{uuid}?type=test&server=http://dev2.ndexbio.org"
 
         else: 
             raise ValueError("Invalid method!")
@@ -453,7 +458,7 @@ class DiseaseScope(object):
             main_feature=main_feature,
         )
         uuid = ndex_url.split('/')[-1]
-        self.hiview_url = f"http://hiview-test.ucsd.edu/{uuid}?type=test&server=http://dev2.ndexbio.org" 
+        self.hiview_url = f"http://hiview-test.ucsd.edu/{uuid}?type=test&server=http://dev2.ndexbio.org"
 
 
     def name_ontology_terms(
@@ -474,7 +479,7 @@ class DiseaseScope(object):
             raise ValueError("No ontology found! Please run `infer_hiearchical_"
                 "model first!")
 
-        with open(self.GENESET_FILE) as f: 
+        with open(self.geneset_file) as f:
             combined_genesets = {}
             
             for line in f: 

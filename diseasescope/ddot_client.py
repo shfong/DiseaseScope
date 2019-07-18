@@ -40,7 +40,8 @@ class DDOT_Client(object):
             self.DDOT_API = ddot_api_location
 
     @classmethod 
-    def from_dataframe(cls, dataframe, verbose=False, ddot_api_location=None):
+    def from_dataframe(cls, dataframe, verbose=False, ddot_api_location=None,
+                       temp_path=''):
         """Constructs the DDOT_caller object from pandas DataFrame
 
         Parameters
@@ -57,7 +58,7 @@ class DDOT_Client(object):
         if not isinstance(dataframe, pd.DataFrame): 
             raise ValueError("dataframe must be a pandas DataFrame!") 
         
-        filename = cls._save_dataframe(dataframe) 
+        filename = cls._save_dataframe(dataframe, path=temp_path)
 
         return cls(filename, verbose=verbose, ddot_api_location=ddot_api_location)
 
