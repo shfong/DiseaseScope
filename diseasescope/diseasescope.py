@@ -3,6 +3,7 @@
 """Main module."""
 
 import mygene
+import numpy as np
 import ndex2
 import networkx as nx
 import pandas as pd
@@ -82,6 +83,8 @@ class DiseaseScope(object):
 
     BASE_FILE = Path(__file__).parents[1]
     DOID_FILE = BASE_FILE / "data" / "doid" / "doid_name_mappings.txt"
+    GENESET_FILE = BASE_FILE / "data" / "genesets" / "combined_genesets.txt"
+    PCNET_UUID = "f93f402c-86d4-11e7-a10d-0ac135e8bacf"
 
     def __init__(self, doid, convert_doid=False):
         # self._check_doid(doid)
@@ -157,9 +160,9 @@ class DiseaseScope(object):
         return self
 
     
-    def get_disease_tissues(self, n=10, method='pubmed'): 
+    def get_disease_tissues(self, n=10, method='pubmed', sep=' '): 
         if method == 'pubmed': 
-            self.tissues = get_tissue_from_pmc_w2v(self.disease, n=n)
+            self.tissues = get_tissue_from_pmc_w2v(self.disease, n=n, sep=sep)
 
         elif method == 'biothings': 
             raise NotImplementedError
@@ -212,7 +215,7 @@ class DiseaseScope(object):
 
         elif method == 'random walk':
             attr = {'heat': {
-                i:0 if i in self.genes else 1 for i in self.network.node_names}
+                i:1 if i in self.genes else 0 for i in self.network.node_names}
             }
 
             expanded_index = (
@@ -226,7 +229,7 @@ class DiseaseScope(object):
                     .tolist()
             )
 
-            self.expanded_genes = Genes([self.network.node_2_name[i] for i in expanded_index], "entrezgene")
+            self.expanded_genes = Genes([self.network.node_2_name[i] for i in expanded_index], self.genes.scope)
         
         elif method == 'heat diffusion': 
             attr = {'heat': {
@@ -244,7 +247,7 @@ class DiseaseScope(object):
                     .tolist()
             )
 
-            self.expanded_genes = Genes([self.network.node_2_name[i] for i in expanded_index], "entrezgene")
+            self.expanded_genes = Genes([self.network.node_2_name[i] for i in expanded_index], self.genes.scope)
 
         else: 
             raise ValueError("Invalid method!")
@@ -406,24 +409,157 @@ class DiseaseScope(object):
             if len(self.edge_table.columns) != 3:
                 #TODO
                 print("future warning about edge table columns")
+            
+            if method_kwargs.get("upload_to_ndex", True): 
+                self.upload_ontology_to_ndex(
+                    method_kwargs['ndex_username'], 
+                    method_kwargs['ndex_password'], 
+                    ndex_server = method_kwargs.get('ndex_server', "http://ttest.ndexbio.org"), 
+                    main_network =self.edge_table, 
+                    main_feature = self.edge_table.columns[-1]
+                )
 
-            ndex_url, _ = self.ontology.to_ndex(
-                method_kwargs['ndex_username'], 
-                method_kwargs['ndex_password'], 
-                method_kwargs.get('ndex_server', 'http://test.ndexbio.org'), 
-                network=self.edge_table, 
-                main_feature=self.edge_table.columns[-1]
-            )
+                ndex_url, _ = self.ontology.to_ndex(
+                    method_kwargs['ndex_username'], 
+                    method_kwargs['ndex_password'], 
+                    method_kwargs.get('ndex_server', 'http://test.ndexbio.org'), 
+                    network=self.edge_table, 
+                    main_feature=self.edge_table.columns[-1]
+                )
 
-            uuid = ndex_url.split('/')[-1]
-            self.hiview_url = f"http://hiview-test.ucsd.edu/{uuid}?type=test&server=http://dev2.ndexbio.org" 
+                uuid = ndex_url.split('/')[-1]
+                self.hiview_url = f"http://hiview-test.ucsd.edu/{uuid}?type=test&server=http://dev2.ndexbio.org" 
 
         else: 
             raise ValueError("Invalid method!")
 
         return self
 
+    
+    def upload_ontology_to_ndex(
+        self, 
+        ndex_username, 
+        ndex_password, 
+        main_network=None, 
+        main_feature=None,
+        ndex_server="http://test.ndexbio.org"
+    ): 
+
+        ndex_url, _ = self.ontology.to_ndex(
+            ndex_username, 
+            ndex_password, 
+            ndex_server, 
+            network=main_network, 
+            main_feature=main_feature,
+        )
+        uuid = ndex_url.split('/')[-1]
+        self.hiview_url = f"http://hiview-test.ucsd.edu/{uuid}?type=test&server=http://dev2.ndexbio.org" 
+
+
+    def name_ontology_terms(
+        self, 
+        method="jaccard", 
+        threshold=0.1, 
+        correct_for_background=False, 
+        update_ontology=False,
+        to_ndex=False,
+        **kwargs
+    ):
+
+        """Performs basic enrichment for each term
+
+        """
+
+        if not hasattr(self, "ontology"): 
+            raise ValueError("No ontology found! Please run `infer_hiearchical_"
+                "model first!")
+
+        with open(self.GENESET_FILE) as f: 
+            combined_genesets = {}
+            
+            for line in f: 
+                key, value = line.split(';')
+                value = value.split(',')
+            
+                combined_genesets[key] = value    
+
+        ontology_genes = np.array(self.ontology.genes)
+
+        if correct_for_background:     
+            corrected_threhsold = threshold*len(combined_genesets)
+        else: 
+            corrected_threhsold = threshold
+
+        term_names = []
+        for term, gene_index in self.ontology.term_2_gene.items(): 
+            genes_in_term = ontology_genes[gene_index]
+
+            scores = []
+            for name, geneset in combined_genesets.items(): 
+                if method == "jaccard": 
+                    j = jaccard(genes_in_term, geneset)
+                    scores.append((name, j))
+
+                elif method == "hypergeometric":
+                    pval = hypergeometric(
+                        ontology_genes, 
+                        geneset, 
+                        genes_in_term,
+                        background=1
+                    )
+
+                    scores.append((name, pval))
+
+            scores = sorted(scores, key=lambda x:x[1], 
+                reverse=True if method == "jaccard" else False)
+
+            best_score = scores[0]
+
+            if method == "jaccard": 
+                pass_threshold = best_score[1] > corrected_threhsold
+            else: 
+                pass_threshold = best_score[1] < corrected_threhsold
+
+            if pass_threshold: 
+                term_names.append((term, *best_score))
+    
+        new_name_map = dict([(i,f"{i} - {j}") for i,j,*_ in term_names])
+
+        if update_ontology:
+            self.ontology = self.ontology.rename(terms=new_name_map, inplace=True)
+
+        if to_ndex: 
+            self.upload_ontology_to_ndex(
+                kwargs['ndex_username'], 
+                kwargs['ndex_password'],
+                ndex_server=kwargs.get("ndex_server",'http://test.ndexbio.org'),
+                main_network=kwargs.get("main_network", None), 
+                main_feature=kwargs.get("main_feature", None),
+            )
+
+        return term_names
 
     def _check_doid(self, doid): 
         raise NotImplementedError
 
+
+def jaccard(setA, setB):
+    """"Jaccard Index"""
+
+    setA, setB = set(setA), set(setB)
+    
+    return len(setA.intersection(setB)) / len(setA.union(setB))
+
+def hypergeometric(total_genes, gold_standard_genes, term, background=1): 
+    """Performs hypergeometric test"""
+
+    M = len(total_genes)
+    N = len(term) # Sample size
+    n = len(set(total_genes).intersection(gold_standard_genes))
+    x = len(set(term).intersection(gold_standard_genes))
+    
+    rv = hypergeom.sf(
+        x-1, M, n, N
+    )
+    
+    return min(rv*background, 1)
