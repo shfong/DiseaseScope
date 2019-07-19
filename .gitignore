@@ -107,3 +107,6 @@ ENV/
 
 #Mac
 .DS_Store
+
+#private
+private/

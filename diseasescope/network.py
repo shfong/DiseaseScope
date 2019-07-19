@@ -69,7 +69,7 @@ def random_walk_rst(
     tol = 10
     
     if not issparse(F0) and issparse(A): 
-        warnings.warn("Forcing F0 to be sparse") 
+        # warnings.warn("Forcing F0 to be sparse") 
         F0 = csr_matrix(F0)
         
  
@@ -205,6 +205,11 @@ def calculate_alpha(network, m=-0.02935302, b=0.74842057):
 
     else:
         return alpha_val
+
+
+def melt_upper_triu(df): 
+    keep = np.triu(np.ones(df.shape)).astype('bool').reshape(df.size)
+    return df.stack(dropna=False)[keep]
 
 
 class Network(ABC): 
@@ -518,6 +523,17 @@ class NxNetwork(Network):
 
         return self._laplacian_matrix
 
+    
+    def convert_edge_attribute_type(self, edge_attribute, edge_type): 
+        edges = self.network.edge
+
+        for s in edges.keys(): 
+            for t in edges[s].keys(): 
+                attrs = edges[s][t]
+                attrs[edge_attribute] = edge_type(attrs[edge_attribute])
+
+        return self
+
 
     def add_adjacency_matrix(self, weights=None): 
         self._adjacency_matrix = nx.adjacency_matrix(
@@ -530,7 +546,21 @@ class NxNetwork(Network):
     def add_laplacian_matrix(self, weights=None): 
         self._laplacian_matrix = nx.laplacian_matrix(self.network, weight=weights)
 
-        return self  
+        return self 
+
+
+    def add_edge_table(self, weight="weight"): 
+        adj_df = nx.to_pandas_dataframe(self.network, weight=weight, nonedge=np.nan)
+        edge_table = melt_upper_triu(adj_df)
+        edge_table = edge_table.loc[pd.notnull(edge_table)].reset_index()
+        edge_table.columns = ['Gene1', 'Gene2', weight]
+        edge_table[['Gene1', 'Gene2']] = (
+            edge_table
+                [['Gene1', 'Gene2']]
+                .applymap(lambda x: self.node_2_name.get(x,x))
+        )
+
+        return edge_table
 
 
     def nodes(self): 
@@ -606,12 +636,17 @@ class NxNetwork(Network):
         self,
         uuid="f93f402c-86d4-11e7-a10d-0ac135e8bacf", #PCNet
         node_name="name",
+        ndex_username=None, 
+        ndex_password=None,
+        ndex_server="http://public.ndexbio.org",
     ):
 
         del self.__dict__
 
         network_niceCx = ndex2.create_nice_cx_from_server(
-            server='public.ndexbio.org',
+            server=ndex_server,
+            username=ndex_username,
+            password=ndex_password,
             uuid=uuid
         )
 

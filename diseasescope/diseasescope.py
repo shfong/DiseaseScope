@@ -8,6 +8,7 @@ import ndex2
 import networkx as nx
 import pandas as pd
 from pathlib import Path
+from scipy.stats import hypergeom
 
 from .biggim import BigGIM
 from .disgenet import DisGeNet
@@ -136,6 +137,16 @@ class DiseaseScope(object):
 
         return self.doid_name_mapping[key]
 
+
+    def set_disease_genes(self, genes, scope): 
+        self.genes = Genes(genes, scope)
+
+        return self
+
+    def set_expanded_genes(self, expanded_genes, scope): 
+        self.expanded_genes = Genes(expanded_genes, scope)
+
+        return self
 
     def get_disease_genes(self, method='biothings'): 
         if method == 'biothings':
@@ -274,9 +285,9 @@ class DiseaseScope(object):
             )
 
             self.edge_table = self.biggim.result_dataframe[['Gene1', 'Gene2', 'mean']] #TODO: Move these column names to attribute
-            self.assign_scope_to_edge_table(
-                {'Gene1': self.expanded_genes.scope, 'Gene2': self.expanded_genes.scope}
-            )
+            # self.assign_scope_to_edge_table(
+            #     {'Gene1': self.expanded_genes.scope, 'Gene2': self.expanded_genes.scope}
+            # )
 
             if kwargs.get('to_network'):
                 dG = nx.from_pandas_dataframe(self.edge_table, 'Gene1', 'Gene2', edge_attr=True)
@@ -286,12 +297,19 @@ class DiseaseScope(object):
             if 'uuid' not in kwargs: 
                 raise ValueError("uuid is missing from keyword arguments!")
 
-            self.network = NxNetwork().from_ndex(uuid=kwargs['uuid'])
+            self.network = NxNetwork().from_ndex(
+                ndex_server=kwargs.get("ndex_server", "http://public.ndexbio.org"), 
+                ndex_username=kwargs.get("ndex_username", None),
+                ndex_password=kwargs.get("ndex_password", None),
+                uuid=kwargs['uuid']
+            )
 
         elif method == 'networkx': 
             self.network = NxNetwork(kwargs['network'])
         
         elif method == 'igraph': 
+            raise NotImplementedError
+
             from .network import IgNetwork
 
             self.network = IgNetwork(kwargs['network'])
@@ -302,26 +320,38 @@ class DiseaseScope(object):
         return self
 
 
-    def assign_scope_to_edge_table(self, scopes, update=False): 
-        """Assign scope dictionary to gene name columns to edge_table
 
-        #TODO: Might be deprecated
+    def get_edge_table(self, attribute, weight=None): 
+        network = getattr(self, attribute, None)
+        if network is None or not isinstance(network, NxNetwork): 
+            raise ValueError("Attribute is not valid!")
 
-        Paramters
-        ---------
-        scopes : dict
-            edge_table columns to scope map
-        """
-
-        if not all([scope in self.edge_table.columns for scope in scopes]): 
-            raise ValueError("keys to scopes are not in edge_table columns.")
-
-        if update: 
-            self.edge_table_scopes.update(scopes)
-        else: 
-            self.edge_table_scopes = scopes
+        self.edge_table = network.add_edge_table(weight = weight)
 
         return self
+
+
+
+    # def assign_scope_to_edge_table(self, scopes, update=False): 
+    #     """Assign scope dictionary to gene name columns to edge_table
+
+    #     #TODO: Might be deprecated
+
+    #     Paramters
+    #     ---------
+    #     scopes : dict
+    #         edge_table columns to scope map
+    #     """
+
+    #     if not all([scope in self.edge_table.columns for scope in scopes]): 
+    #         raise ValueError("keys to scopes are not in edge_table columns.")
+
+    #     if update: 
+    #         self.edge_table_scopes.update(scopes)
+    #     else: 
+    #         self.edge_table_scopes = scopes
+
+    #     return self
     
     def convert_edge_table_names(
         self, 
@@ -414,7 +444,7 @@ class DiseaseScope(object):
                 self.upload_ontology_to_ndex(
                     method_kwargs['ndex_username'], 
                     method_kwargs['ndex_password'], 
-                    ndex_server = method_kwargs.get('ndex_server', "http://ttest.ndexbio.org"), 
+                    ndex_server = method_kwargs.get('ndex_server', "http://test.ndexbio.org"), 
                     main_network =self.edge_table, 
                     main_feature = self.edge_table.columns[-1]
                 )
@@ -486,7 +516,7 @@ class DiseaseScope(object):
         ontology_genes = np.array(self.ontology.genes)
 
         if correct_for_background:     
-            corrected_threhsold = threshold*len(combined_genesets)
+            corrected_threhsold = threshold/len(combined_genesets)
         else: 
             corrected_threhsold = threshold
 
