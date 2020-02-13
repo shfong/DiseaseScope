@@ -118,6 +118,11 @@ class DiseaseScope(object):
         if doid_mapping_file is None: 
             doid_mapping_file = self.DOID_FILE
 
+        if not Path(doid_mapping_file).exists(): 
+            raise RuntimeError(
+                f"{doid_mapping_file} cannot be found! Try providing the file in the init. The file can be found in https://github.com/shfong/DiseaseScope/blob/master/data/doid/doid_name_mappings.txt."
+            )
+
         doid_name_mapping = {}
         with open(doid_mapping_file) as f: 
             for line in f: 
