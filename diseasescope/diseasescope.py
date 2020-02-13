@@ -87,7 +87,10 @@ class DiseaseScope(object):
     GENESET_FILE = BASE_FILE / "data" / "genesets" / "combined_genesets.txt"
     PCNET_UUID = "f93f402c-86d4-11e7-a10d-0ac135e8bacf"
 
-    def __init__(self, doid, convert_doid=False):
+    def __init__(self, doid, convert_doid=False, doid_file=None):
+        if doid_file is not None: 
+            self.DOID_FILE = doid_file
+
         # self._check_doid(doid)
         self.doid = doid
 
