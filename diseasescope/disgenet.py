@@ -15,6 +15,15 @@ class DisGeNet(object):
         df = pd.DataFrame.from_dict(result)
         self.result = df
 
+        if not hasattr(df, "columns"):
+            raise RuntimeError("Results were not properly parsed.")
+
+        if 'score' not in df.columns: 
+            raise ValueError(
+                """`score` is not found in the disgenet result. Likely due """
+                """to the disease not being found in DisGeNet."""
+            )
+
         return self
 
     def get_top_genes(self, method="second_derivative"): 
