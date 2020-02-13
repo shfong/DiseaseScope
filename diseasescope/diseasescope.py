@@ -150,6 +150,10 @@ class DiseaseScope(object):
 
     def get_disease_genes(self, method='biothings'): 
         if method == 'biothings':
+            raise NotImplementedError(
+                """Biothings API links have changed. Updated links have not """
+                """yet been implemented. Please use `disgenet` instead."""
+            )
             self.genes = Genes(
                 doid_to_genes_direct(self.doid), 
                 "entrezgene",
